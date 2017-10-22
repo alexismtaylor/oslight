@@ -76,6 +76,10 @@ struct lock {
         char *lk_name;
         // add what you need here
         // (don't forget to mark things volatile as needed)
+	//volatile int lockVol;
+	struct thread *volatile threadLock;
+	struct wchan *wchanLock;
+	struct spinlock splkLock;
 };
 
 struct lock *lock_create(const char *name);
@@ -115,6 +119,8 @@ struct cv {
         char *cv_name;
         // add what you need here
         // (don't forget to mark things volatile as needed)
+	struct spinlock splkCV;
+	struct wchan *wchanCV;
 };
 
 struct cv *cv_create(const char *name);
