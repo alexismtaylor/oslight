@@ -109,6 +109,9 @@ struct thread {
 	bool t_did_reserve_buffers;	/* reserve_buffers() in effect */
 
 	/* add more here as needed */
+	struct thread *parentThread;
+	struct semaphore *parentSem; //pointer for semaphore parent
+	struct semaphore *childSem; 
 };
 
 /*
@@ -146,6 +149,11 @@ void thread_shutdown(void);
 int thread_fork(const char *name, struct proc *proc,
                 void (*func)(void *, unsigned long),
                 void *data1, unsigned long data2);
+
+int thread_fork2(const char *name, struct thread **theThread, struct proc *proc, void (*func)(void *, unsigned long), void *data1, unsigned long data2);
+//new thread fork function for thread_join
+
+int thread_join(struct thread *theThread, int *retVal);
 
 /*
  * Cause the current thread to exit.

@@ -150,7 +150,9 @@ thread_create(const char *name)
 	thread->t_did_reserve_buffers = false;
 
 	/* If you add to struct thread, be sure to initialize here */
-
+	thread->parentThread = NULL;
+	thread->parentSem = NULL;
+	thread->childSem = sem_create(name, 0);
 	return thread;
 }
 
@@ -264,13 +266,26 @@ static
 void
 thread_destroy(struct thread *thread)
 {
+	//struct thread *cur;
+
+	//cur = curthread;	
+	
 	KASSERT(thread != curthread);
 	KASSERT(thread->t_state != S_RUN);
-
+	
+	/*if(cur->parentSem != NULL)
+	{
+		V(cur->childSem);
+		P(cur->parentSem);
+		sem_destroy(cur->childSem);
+		sem_destroy(cur->parentSem);
+	}*/
 	/*
 	 * If you add things to struct thread, be sure to clean them up
 	 * either here or in thread_exit(). (And not both...)
 	 */
+	//sem_destroy(thread->childSem);
+	//sem_destroy(thread->parentSem); moved to thread exit
 
 	/* VFS fields, cleaned up in thread_exit */
 	KASSERT(thread->t_did_reserve_buffers == false);
@@ -550,6 +565,103 @@ thread_fork(const char *name,
 	return 0;
 }
 
+//thread fork implementation for thread_join
+int
+thread_fork2(const char *name, struct thread **theThread,
+	    struct proc *proc,
+	    void (*entrypoint)(void *data1, unsigned long data2),
+	    void *data1, unsigned long data2)
+{
+	struct thread *newthread;
+	int result;
+
+	newthread = thread_create(name);
+	if (newthread == NULL) {
+		return ENOMEM;
+	}
+
+	/* Allocate a stack */
+	newthread->t_stack = kmalloc(STACK_SIZE);
+	if (newthread->t_stack == NULL) {
+		thread_destroy(newthread);
+		return ENOMEM;
+	}
+	thread_checkstack_init(newthread);
+
+	/*
+	 * Now we clone various fields from the parent thread.
+	 */
+
+	/* Thread subsystem fields */
+	newthread->t_cpu = curthread->t_cpu;
+	if(theThread != NULL)
+	{
+		*theThread = newthread;
+		newthread->parentThread = curthread;
+		newthread->parentSem = sem_create(name, 0);
+		/*if(newthread->parentSem == NULL) //the thread's parent sem failed so delete it
+		{
+			thread_destroy(newthread);
+			return -1;			
+		}*/
+	}
+
+	/* Attach the new thread to its process */
+	if (proc == NULL) {
+		proc = curthread->t_proc;
+	}
+	result = proc_addthread(proc, newthread);
+	if (result) {
+		/* thread_destroy will clean up the stack */
+		thread_destroy(newthread);
+		return result;
+	}
+
+	/*
+	 * Because new threads come out holding the cpu runqueue lock
+	 * (see notes at bottom of thread_switch), we need to account
+	 * for the spllower() that will be done releasing it.
+	 */
+	newthread->t_iplhigh_count++;
+
+	/* Set up the switchframe so entrypoint() gets called */
+	switchframe_init(newthread, entrypoint, data1, data2);
+
+	/* Lock the current cpu's run queue and make the new thread runnable */
+	thread_make_runnable(newthread, false);
+
+	return 0;
+}
+
+/*thread join implementation, in unix pthread_join(pthread_t thread, void **retval)
+*suspend execution of calling thread until target thread terminates, unless target thread already terminated.
+Shall return 0 if function is successful, error num returned if not successful
+*/
+int thread_join(struct thread *theThread, int *retVal)
+{
+	struct thread *temp;
+	struct thread *temp2;
+
+	temp2 = theThread->parentThread; //set the thread param's thread to parent thread
+	if(theThread == NULL)
+		return -1; //check if we can join this thread, if not joinable then return
+	if(temp2 == NULL)
+		return -1; //making sure the parentThread wasn't empty
+	temp = curthread; //temporarily store curthread
+	if(theThread == temp)
+		return -1; //making sure that thread passed in isn't the same as the the curthread
+	if(theThread->childSem == NULL)
+		return -1; //make sure child semaphore isn't null
+	if(theThread->parentSem == NULL)
+		return -1; //make sure parent semaphore isn't null
+	P(theThread->childSem);
+	theThread->parentThread = NULL;
+	V(theThread->parentSem);
+	*retVal = 0; //not needed
+	return 0; //returning 0 because not dealing with deadlocks.
+}
+
+
 /*
  * High level, machine-independent context switch code.
  *
@@ -787,6 +899,14 @@ thread_exit(void)
 
 	KASSERT(cur->t_did_reserve_buffers == false);
 
+	if(cur->parentSem != NULL)
+	{
+		V(cur->childSem);
+		P(cur->parentSem);
+		sem_destroy(cur->childSem);
+		sem_destroy(cur->parentSem);
+	}
+	
 	/*
 	 * Detach from our process. You might need to move this action
 	 * around, depending on how your wait/exit works.
@@ -798,6 +918,7 @@ thread_exit(void)
 
 	/* Check the stack guard band. */
 	thread_checkstack(cur);
+
 
 	/* Interrupts off on this processor */
         splhigh();

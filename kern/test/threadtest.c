@@ -32,9 +32,9 @@
  */
 #include <types.h>
 #include <lib.h>
-#include <thread.h>
-#include <synch.h>
 #include <test.h>
+#include <synch.h>
+#include <thread.h>
 
 #define NTHREADS  8
 
@@ -116,6 +116,35 @@ runthreads(int doloud)
 	}
 }
 
+static
+void testJoin(void *temp, unsigned long tempThread)
+{
+	(void) temp;
+	kprintf("Inside testJoin for thread: %ld\n", tempThread);
+}
+
+static
+void
+runJoin(void)
+{
+	struct thread* threads[NTHREADS];
+	int i;
+	for(i = 0; i < NTHREADS; i++)
+	{
+		kprintf("Thread fork creation for thread: %d\n", i);
+		thread_fork2("thread_child", &(threads[i]), NULL, &testJoin, NULL, i);
+	}
+
+	int returnVal;
+	for(i = 0; i <NTHREADS; i++)
+	{
+		kprintf("Joining thread: %d\n", i);
+		thread_join(threads[i], &returnVal);
+		kprintf("The result of this thread join was: %d\n", returnVal);
+	}
+		
+}
+
 
 int
 threadtest(int nargs, char **args)
@@ -142,5 +171,18 @@ threadtest2(int nargs, char **args)
 	runthreads(0);
 	kprintf("\nThread test 2 done.\n");
 
+	return 0;
+}
+
+int 
+threadtest4(int nargs, char **args)
+{
+	(void)nargs;
+	(void)args;
+
+	init_sem();
+	kprintf("Starting thread test 4...\n");
+	runJoin();
+	kprintf("\nThread test 4 done.\n");
 	return 0;
 }
