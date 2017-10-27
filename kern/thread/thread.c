@@ -265,27 +265,15 @@ cpu_create(unsigned hardware_number)
 static
 void
 thread_destroy(struct thread *thread)
-{
-	//struct thread *cur;
-
-	//cur = curthread;	
+{	
 	
 	KASSERT(thread != curthread);
 	KASSERT(thread->t_state != S_RUN);
 	
-	/*if(cur->parentSem != NULL)
-	{
-		V(cur->childSem);
-		P(cur->parentSem);
-		sem_destroy(cur->childSem);
-		sem_destroy(cur->parentSem);
-	}*/
 	/*
 	 * If you add things to struct thread, be sure to clean them up
 	 * either here or in thread_exit(). (And not both...)
 	 */
-	//sem_destroy(thread->childSem);
-	//sem_destroy(thread->parentSem); moved to thread exit
 
 	/* VFS fields, cleaned up in thread_exit */
 	KASSERT(thread->t_did_reserve_buffers == false);
@@ -599,11 +587,6 @@ thread_fork2(const char *name, struct thread **theThread,
 		*theThread = newthread;
 		newthread->parentThread = curthread;
 		newthread->parentSem = sem_create(name, 0);
-		/*if(newthread->parentSem == NULL) //the thread's parent sem failed so delete it
-		{
-			thread_destroy(newthread);
-			return -1;			
-		}*/
 	}
 
 	/* Attach the new thread to its process */
